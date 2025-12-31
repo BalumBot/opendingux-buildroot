@@ -1,6 +1,7 @@
 name: OpenDingux_buildroot
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - opendingux
