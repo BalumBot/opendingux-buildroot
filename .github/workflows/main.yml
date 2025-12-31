@@ -18,14 +18,14 @@ jobs:
       matrix:
         target: [ 'gcw0' ]
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: 'true'
     - name: Blocked invisible-mirror.net workaround
       run: echo "1.1.1.1 invisible-mirror.net" | tee -a /etc/hosts
     - name: Cache downloads
       id: cache-downloads
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: dl
         key: downloads
@@ -36,7 +36,7 @@ jobs:
         string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
         file(APPEND $ENV{GITHUB_OUTPUT} "timestamp=${current_date}\n")
     - name: ccache cache files
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: output/ccache/${{ matrix.target }}
         key: ${{ matrix.config.name }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
@@ -49,17 +49,17 @@ jobs:
         TOP_MAKE_COMMAND: utils/brmake
         BR2_JLEVEL: 0
         FORCE_UNSAFE_CONFIGURE: 1
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: toolchain-${{ matrix.target }}
         path: |
           output/${{ matrix.target }}/images/*.tar*
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: update-${{ matrix.target }}
         path: |
           output/${{ matrix.target }}/images/*.opk
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       if: always()
       with:
         name: ${{ matrix.target }}-log
@@ -79,19 +79,19 @@ jobs:
         TOP_MAKE_COMMAND: utils/brmake
         BR2_JLEVEL: 0
         FORCE_UNSAFE_CONFIGURE: 1
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       if: ${{ matrix.target == 'rs90' }}
       with:
         name: odboot-client-linux
         path: |
           output/installer/images/odboot-client
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       if: ${{ matrix.target == 'rs90' }}
       with:
         name: vmlinuz
         path: |
           output/installer/images/vmlinuz.bin
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       if: ${{ matrix.target == 'rs90' && always() }}
       with:
         name: ${{ matrix.target }}-installer-log
@@ -116,7 +116,7 @@ jobs:
           mingw-w64-x86_64-toolchain
           mingw-w64-x86_64-cmake
           mingw-w64-x86_64-libusb
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         repository: 'pcercuei/libini'
         path: 'libini'
@@ -126,7 +126,7 @@ jobs:
         cmake --build build --config Release --parallel
         cmake --install build --prefix /usr
       working-directory: libini
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         repository: 'pcercuei/libopk'
         path: 'libopk'
@@ -136,11 +136,11 @@ jobs:
         cmake --build build --config Release --target opk
         cmake --install build --prefix /usr
       working-directory: libopk
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         repository: 'OpenDingux/odbootd'
         path: 'odbootd'
-    - uses: actions/download-artifact@v2
+    - uses: actions/download-artifact@v4
       with:
         name: vmlinuz
         path: odbootd
@@ -149,7 +149,7 @@ jobs:
         PKG_CONFIG_PATH=/usr/lib/pkgconfig cmake -DWITH_ODBOOTD=OFF -DSTATIC_EXE=ON -DEMBEDDED_INSTALLER=vmlinuz.bin -Bbuild -G "MSYS Makefiles"
         cmake --build build --config Release
       working-directory: odbootd
-    - uses: actions/upload-artifact@v3
+    - uses: actions/upload-artifact@v4
       with:
         name: odboot-client-windows
         path: |
