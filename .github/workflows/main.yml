@@ -33,9 +33,8 @@ jobs:
         key: downloads
     - name: Prepare ccache timestamp
       id: ccache_cache_timestamp
-      shell: cmake -P {0}
-      run: |
-        string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
+      run: 
+        cmake string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
         file(APPEND $ENV{GITHUB_OUTPUT} "timestamp=${current_date}\n")
     - name: ccache cache files
       uses: actions/cache@v4
@@ -83,93 +82,5 @@ jobs:
         name: ${{ matrix.target }}-log
         path: |
           br.log
-    - name: Build installer
-      if: ${{ matrix.target == 'rs90' }}
-      run: |
-        echo "BR2_TOOLCHAIN_EXTERNAL_PATH=\"$(pwd)/output/rs90/host\"" >> configs/od_installer_defconfig
-        echo "BR2_TOOLCHAIN_EXTERNAL_PREINSTALLED=y" >> configs/od_installer_defconfig
-        echo "BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=n" >> configs/od_installer_defconfig
-        sed -i "s/BR2_TOOLCHAIN_EXTERNAL_HEADERS_.*=y/BR2_TOOLCHAIN_EXTERNAL_HEADERS_$(sed -n 's/BR2_PACKAGE_HOST_LINUX_HEADERS_CUSTOM_\(.*\)=y/\1/p' output/rs90/.config)=y/" configs/od_installer_defconfig
-        sed -i "s/BR2_TOOLCHAIN_EXTERNAL_GCC_.*=y/BR2_TOOLCHAIN_EXTERNAL_GCC_$(sed -n 's/BR2_GCC_VERSION_\(.*\)_X=y/\1/p' output/rs90/.config)=y/" configs/od_installer_defconfig
-        ./rebuild.sh
-      env:
-        CONFIG: installer
-        TOP_MAKE_COMMAND: utils/brmake
-        BR2_JLEVEL: 0
-        FORCE_UNSAFE_CONFIGURE: 1
-    - uses: actions/upload-artifact@v4
-      if: ${{ matrix.target == 'rs90' }}
-      with:
-        name: odboot-client-linux
-        path: |
-          output/installer/images/odboot-client
-    - uses: actions/upload-artifact@v4
-      if: ${{ matrix.target == 'rs90' }}
-      with:
-        name: vmlinuz
-        path: |
-          output/installer/images/vmlinuz.bin
-    - uses: actions/upload-artifact@v4
-      if: ${{ matrix.target == 'rs90' && always() }}
-      with:
-        name: ${{ matrix.target }}-installer-log
-        path: |
-          br.log
 
-  build-win:
-    name: Build odbootd (Windows)
-    runs-on: windows-2022
-    needs: build
-    defaults:
-      run:
-        shell: msys2 {0}
-    steps:
-    - uses: msys2/setup-msys2@v2
-      with:
-        update: false
-        msystem: mingw64
-        install: >-
-          base-devel
-          git
-          mingw-w64-x86_64-toolchain
-          mingw-w64-x86_64-cmake
-          mingw-w64-x86_64-libusb
-    - uses: actions/checkout@v4
-      with:
-        repository: 'pcercuei/libini'
-        path: 'libini'
-    - name: Configure, build and install libini
-      run: |
-        cmake -Bbuild -G "MSYS Makefiles" -DBUILD_SHARED_LIBS=OFF
-        cmake --build build --config Release --parallel
-        cmake --install build --prefix /usr
-      working-directory: libini
-    - uses: actions/checkout@v4
-      with:
-        repository: 'pcercuei/libopk'
-        path: 'libopk'
-    - name: Configure, build and install libopk
-      run: |
-        PKG_CONFIG_PATH=/usr/lib/pkgconfig cmake -Bbuild -G "MSYS Makefiles" -DBUILD_SHARED_LIBS=OFF
-        cmake --build build --config Release --target opk
-        cmake --install build --prefix /usr
-      working-directory: libopk
-    - uses: actions/checkout@v4
-      with:
-        repository: 'OpenDingux/odbootd'
-        path: 'odbootd'
-    - uses: actions/download-artifact@v4
-      with:
-        name: vmlinuz
-        path: odbootd
-    - name: Configure, build and package odbootd
-      run: |
-        PKG_CONFIG_PATH=/usr/lib/pkgconfig cmake -DWITH_ODBOOTD=OFF -DSTATIC_EXE=ON -DEMBEDDED_INSTALLER=vmlinuz.bin -Bbuild -G "MSYS Makefiles"
-        cmake --build build --config Release
-      working-directory: odbootd
-    - uses: actions/upload-artifact@v4
-      with:
-        name: odboot-client-windows
-        path: |
-          odbootd/build/odboot-client.exe
 
