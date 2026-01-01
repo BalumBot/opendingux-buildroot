@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: ghcr.io/opendingux/retro-toolchain/buildroot
+      
     strategy:
       matrix:
         target: [ 'gcw0' ]
@@ -22,20 +23,8 @@ jobs:
         submodules: 'true'
     - name: Blocked invisible-mirror.net workaround
       run: echo "1.1.1.1 invisible-mirror.net" | tee -a /etc/hosts
-    - name: Free Disk Space (Ubuntu)
-      uses: jlumbroso/free-disk-space@main
-      with:
-        # this might remove tools that are actually needed,
-        # if set to "true" but frees about 6 GB
-        tool-cache: false
-        # all of these default to true, but feel free to set to
-        # "false" if necessary for your workflow
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: false
-        docker-images: false
-        swap-storage: false
+    - name: Check disk space
+      run: df -h /
     - name: Cache downloads
       id: cache-downloads
       uses: actions/cache@v4
@@ -55,8 +44,24 @@ jobs:
         key: ${{ matrix.config.name }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
         restore-keys: |
           ${{ matrix.config.name }}-ccache-
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        # this might remove tools that are actually needed,
+        # if set to "true" but frees about 6 GB
+        tool-cache: false
+        # all of these default to true, but feel free to set to
+        # "false" if necessary for your workflow
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: false
+        docker-images: false
+        swap-storage: false
     - name: build
-      run: ./rebuild.sh
+      run:
+        df -h /
+        ./rebuild.sh
       env:
         CONFIG: ${{ matrix.target }}
         TOP_MAKE_COMMAND: utils/brmake
