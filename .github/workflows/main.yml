@@ -85,7 +85,7 @@ jobs:
             -e FORCE_UNSAFE_CONFIGURE="${FORCE_UNSAFE_CONFIGURE}" \
             "$IMAGE" \
             /bin/sh -lc '
-              set -euo pipefail
+              set -eu pipefail
 
               echo "--- Blocked invisible-mirror.net workaround (verify)"
               grep -F "invisible-mirror.net" /etc/hosts || true
