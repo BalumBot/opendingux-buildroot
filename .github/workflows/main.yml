@@ -1,11 +1,13 @@
 on:
-  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
 
-name: Buildroot — cleanup on runner, then run remaining steps inside container
+name: Single job — cleanup on runner, then run remaining steps inside container
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         # adapt targets to your needs
@@ -85,7 +87,9 @@ jobs:
             -e FORCE_UNSAFE_CONFIGURE="${FORCE_UNSAFE_CONFIGURE}" \
             "$IMAGE" \
             /bin/sh -lc '
-              set -eu pipefail
+              # Note: minimal /bin/sh often does not support "pipefail".
+              # use set -eu instead of set -euo pipefail for maximum compatibility.
+              set -eu
 
               echo "--- Blocked invisible-mirror.net workaround (verify)"
               grep -F "invisible-mirror.net" /etc/hosts || true
