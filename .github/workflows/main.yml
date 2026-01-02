@@ -1,87 +1,146 @@
-name: OpenDingux_buildroot
-
 on:
   workflow_dispatch:
-   
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+
+name: Buildroot — cleanup on runner, then run remaining steps inside container
 
 jobs:
   build:
-    name: Build
     runs-on: ubuntu-22.04
-    container:
-      image: ghcr.io/opendingux/retro-toolchain/buildroot
-      
     strategy:
       matrix:
-        target: [ 'gcw0' ]
+        # adapt targets to your needs
+        target: ['gcw0']
+
+    env:
+      # environment used for the build step inside the container (will be forwarded)
+      TOP_MAKE_COMMAND: utils/brmake
+      BR2_JLEVEL: 0
+      FORCE_UNSAFE_CONFIGURE: 1
+
     steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: 'true'
-    - name: Blocked invisible-mirror.net workaround
-      run: echo "1.1.1.1 invisible-mirror.net" | tee -a /etc/hosts
-    - name: Check disk space
-      run: df -h /
-    - name: Cache downloads
-      id: cache-downloads
-      uses: actions/cache@v4
-      with:
-        path: dl
-        key: downloads
-    - name: Prepare ccache timestamp
-      id: ccache_cache_timestamp
-      shell: cmake -P {0}
-      run: |
-        string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
-        file(APPEND $ENV{GITHUB_OUTPUT} "timestamp=${current_date}\n")
-    - name: ccache cache files
-      uses: actions/cache@v4
-      with:
-        path: output/ccache/${{ matrix.target }}
-        key: ${{ matrix.config.name }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
-        restore-keys: |
-          ${{ matrix.config.name }}-ccache-
-    - name: Free Disk Space (Ubuntu)
-      uses: jlumbroso/free-disk-space@main
-      with:
-        # this might remove tools that are actually needed,
-        # if set to "true" but frees about 6 GB
-        tool-cache: false
-        # all of these default to true, but feel free to set to
-        # "false" if necessary for your workflow
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: false
-        docker-images: false
-        swap-storage: false
-    - name: build
-      run:
-        df -h /
-        ./rebuild.sh
-      env:
-        CONFIG: ${{ matrix.target }}
-        TOP_MAKE_COMMAND: utils/brmake
-        BR2_JLEVEL: 0
-        FORCE_UNSAFE_CONFIGURE: 1
-    - uses: actions/upload-artifact@v4
-      with:
-        name: toolchain-${{ matrix.target }}
-        path: |
-          output/${{ matrix.target }}/images/*.tar*
-    - uses: actions/upload-artifact@v4
-      with:
-        name: update-${{ matrix.target }}
-        path: |
-          output/${{ matrix.target }}/images/*.opk
-    - uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: ${{ matrix.target }}-log
-        path: |
-          br.log
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          # this might remove tools that are actually needed,
+          # if set to "true" but frees about 6 GB
+          tool-cache: false
+          # all of these default to true, but feel free to set to
+          # "false" if necessary for your workflow
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
 
+      - name: Cache downloads (restore)
+        id: cache-downloads
+        uses: actions/cache@v4
+        with:
+          path: dl
+          key: downloads
+
+      - name: Prepare ccache timestamp
+        id: ccache_cache_timestamp
+        run: |
+          # produce a reproducible timestamp key for ccache caching
+          echo "timestamp=$(date -u '+%Y-%m-%d-%H;%M;%S')" >> $GITHUB_OUTPUT
+
+      - name: ccache cache files (restore)
+        id: restore-ccache
+        uses: actions/cache@v4
+        with:
+          path: output/ccache/${{ matrix.target }}
+          key: ${{ matrix.target }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
+          restore-keys: |
+            ${{ matrix.target }}-ccache-
+
+      - name: Run remaining steps inside ghcr.io/opendingux/retro-toolchain/buildroot
+        env:
+          CONFIG: ${{ matrix.target }}
+          TOP_MAKE_COMMAND: ${{ env.TOP_MAKE_COMMAND }}
+          BR2_JLEVEL: ${{ env.BR2_JLEVEL }}
+          FORCE_UNSAFE_CONFIGURE: ${{ env.FORCE_UNSAFE_CONFIGURE }}
+        run: |
+          IMAGE="ghcr.io/opendingux/retro-toolchain/buildroot:latest"
+
+          # pull image first (image is public so no login required)
+          docker pull "$IMAGE"
+
+          # Run a single container that executes the sequence of steps you listed.
+          # Use --add-host to provide the invisible-mirror.net workaround.
+          # Use single quotes around the -c argument so $CONFIG etc. are expanded inside the container,
+          # not on the runner.
+          docker run --rm \
+            --add-host=invisible-mirror.net:1.1.1.1 \
+            -v "${{ github.workspace }}":/workspace \
+            -w /workspace \
+            --user "$(id -u):$(id -g)" \
+            -e CONFIG="${CONFIG}" \
+            -e TOP_MAKE_COMMAND="${TOP_MAKE_COMMAND}" \
+            -e BR2_JLEVEL="${BR2_JLEVEL}" \
+            -e FORCE_UNSAFE_CONFIGURE="${FORCE_UNSAFE_CONFIGURE}" \
+            "$IMAGE" \
+            /bin/sh -lc '
+              set -euo pipefail
+
+              echo "--- Blocked invisible-mirror.net workaround (verify)"
+              grep -F "invisible-mirror.net" /etc/hosts || true
+
+              echo "--- Check disk space inside container"
+              df -h /
+
+              echo "--- Show downloads cache (dl) if present"
+              ls -la dl || true
+
+              echo "--- Show ccache dir (if present)"
+              ls -la output/ccache/$CONFIG || true
+
+              echo "--- Start build"
+              # run the original build command(s)
+              ./rebuild.sh
+            '
+
+      - name: Cache downloads (save)
+        uses: actions/cache@v4
+        with:
+          path: dl
+          key: downloads
+
+      - name: ccache cache files (save)
+        uses: actions/cache@v4
+        with:
+          path: output/ccache/${{ matrix.target }}
+          key: ${{ matrix.target }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
+          restore-keys: |
+            ${{ matrix.target }}-ccache-
+
+      - name: Upload toolchain artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-${{ matrix.target }}
+          path: |
+            output/${{ matrix.target }}/images/*.tar*
+
+      - name: Upload update artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-${{ matrix.target }}
+          path: |
+            output/${{ matrix.target }}/images/*.opk
+
+      - name: Upload build log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-log
+          path: |
+            br.log
+
+      - name: Final disk check on runner (optional)
+        if: always()
+        run: df -h /
+        
